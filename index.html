@@ -24,6 +24,28 @@
             transition: opacity 0.1s ease-out;
         }
 
+        #warning-overlay {
+            position: absolute;
+            top: 15%; left: 0; width: 100%;
+            text-align: center;
+            pointer-events: none;
+            z-index: 90;
+            display: none;
+        }
+        #warning-text {
+            font-size: 30px;
+            font-weight: 700;
+            color: #ff3333;
+            text-shadow: 0 0 10px #ff0000;
+            letter-spacing: 2px;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            display: inline-block;
+            border: 1px solid #ff3333;
+            animation: blink 0.5s infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
         #ui {
             position: absolute;
             top: 20px;
@@ -60,13 +82,18 @@
         #highscore { font-size: 16px; color: #88ff88; margin-bottom: 5px; }
         #wave { font-size: 18px; color: #888; margin-top: 5px; }
         
+        /* CENTERED AMMO HUD */
         #ammo-hud {
             position: absolute;
             bottom: 30px;
-            right: 30px;
-            text-align: right;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
             pointer-events: none;
             z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         #weapon-name {
             font-size: 20px; 
@@ -75,28 +102,31 @@
             text-transform: uppercase;
             letter-spacing: 1px;
             text-shadow: 0 0 5px rgba(255, 255, 0, 0.5);
-            margin-bottom: 2px;
+            margin-bottom: 5px;
         }
         #ammo-row {
             display: flex;
-            align-items: flex-end;
-            justify-content: flex-end;
-            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
         }
         #ammo-count {
-            font-size: 60px; 
+            font-size: 40px; 
             font-weight: 900;
             color: #fff;
-            line-height: 0.8;
             text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+            min-width: 80px;
+            text-align: left;
         }
         #ammo-bar-container {
-            width: 400px; 
-            height: 10px; 
+            width: 300px; 
+            height: 12px; 
             background: rgba(20, 20, 20, 0.8);
             border: 2px solid #444;
             transform: skewX(-20deg);
             padding: 2px;
+            display: flex;
+            justify-content: center; /* Centers child (fill) */
         }
         #ammo-bar-fill {
             height: 100%;
@@ -173,6 +203,7 @@
 <body>
 
     <div id="flash-overlay"></div>
+    <div id="warning-overlay"><div id="warning-text">⚠ NUCLEAR DETECTED ⚠</div></div>
     <canvas id="gameCanvas"></canvas>
 
     <!-- DEV MENU -->
@@ -309,17 +340,37 @@
             spawnFlanker: () => playTone(600, 'triangle', 0.3, 0.05, true),
             spawnBlind: () => playNoise(0.5, 0.05),
             spawnBoss: () => { playTone(30, 'sawtooth', 3.0, 0.3, false); playNoise(3.0, 0.2); },
-            nukeSpawn: () => playTone(1200, 'sine', 0.5, 0.05, true),
+            nukeSpawn: () => {
+                 playTone(100, 'sawtooth', 1.0, 0.2, false); 
+                 setTimeout(() => playTone(150, 'sawtooth', 1.0, 0.2, false), 500);
+            },
+            nukePing: (vol) => playTone(1000, 'sine', 0.1, vol),
             nukeBlast: () => { playNoise(2.0, 0.5); playTone(50, 'square', 1.0, 0.5); },
             slowMoStart: () => playTone(100, 'sine', 0.3, 0.1, false),
             slowMoEnd: () => playTone(200, 'sine', 0.2, 0.1),
             bossCharge: () => { playTone(80, 'sawtooth', 1.0, 0.2, false); playNoise(0.5, 0.2); },
             bossImpact: () => { playNoise(0.5, 0.5); playTone(40, 'square', 0.5, 0.5); },
-            weakPoint: () => { playTone(1200, 'triangle', 0.1, 0.2); playTone(1500, 'sine', 0.1, 0.2, false); }
+            bossZap: () => { playTone(1500, 'sawtooth', 0.1, 0.3); playTone(500, 'square', 0.1, 0.3); },
+            bossClash: () => { playNoise(1.0, 1.0); playTone(50, 'square', 1.0, 1.0); },
+            weakPoint: () => { playTone(1200, 'triangle', 0.1, 0.2); playTone(1500, 'sine', 0.1, 0.2, false); },
+            minigunWindup: () => {
+                if (!enabled) return;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(50, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.5);
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.5);
+            },
+            minigunSpin: () => playTone(80, 'square', 0.1, 0.05)
         };
     })();
 
-    // -- CHUNK MANAGER (OPTIMIZED: only debris, no background fill) --
     class ChunkManager {
         constructor(worldSize, chunkSize) {
             this.chunkSize = chunkSize;
@@ -342,8 +393,6 @@
             for(let x = 0; x < this.cols; x++) {
                 for(let y = 0; y < this.rows; y++) {
                     const ctx = this.chunks[x][y].ctx;
-                    // OPTIMIZATION: Clear rect only, do not draw background grid here
-                    // Background grid is now drawn cheaply in the main loop
                     ctx.clearRect(0, 0, this.chunkSize, this.chunkSize);
                 }
             }
@@ -410,18 +459,19 @@
     
     let godMode = false;
 
+    // INCREASED SMG AND MINIGUN AMMO
     const WEAPONS = {
         pistol: { name: 'PISTOL', tier: 1, rate: 400, speed: 12, damage: 2, spread: 0.02, count: 1, color: '#ffaa00', recoil: 2, ammo: Infinity, maxCarry: Infinity },
-        smg:    { name: 'SMG',    tier: 1, rate: 110, speed: 13, damage: 1.2, spread: 0.15, count: 1, color: '#ffffaa', recoil: 1, ammo: 80, maxCarry: 240 },
-        shotgun:{ name: 'SHOTGUN',tier: 1, rate: 850, speed: 11, damage: 1, spread: 0.35, count: 7, color: '#ffff00', recoil: 8, ammo: 24, maxCarry: 72 },
-        minigun:{ name: 'MINIGUN',tier: 2, rate: 55,  speed: 14, damage: 0.9, spread: 0.15, count: 1, color: '#00ffff', recoil: 1.5, ammo: 200, maxCarry: 600 },
+        smg:    { name: 'SMG',    tier: 1, rate: 110, speed: 13, damage: 1.8, spread: 0.15, count: 1, color: '#ffffaa', recoil: 1, ammo: 120, maxCarry: 360 }, 
+        shotgun:{ name: 'SHOTGUN',tier: 1, rate: 1500, speed: 11, damage: 2, spread: 0.35, count: 7, color: '#ffff00', recoil: 8, ammo: 24, maxCarry: 72 }, 
+        minigun:{ name: 'MINIGUN',tier: 2, rate: 55,  speed: 14, damage: 2.7, spread: 0.15, count: 1, color: '#00ffff', recoil: 1.5, ammo: 300, maxCarry: 900 }, 
         rocket: { name: 'ROCKET', tier: 2, rate: 1200, speed: 8,  damage: 20, spread: 0,    count: 1, color: '#ff4444', recoil: 10, ammo: 10, maxCarry: 30, explosive: true },
-        railgun:{ name: 'RAILGUN',tier: 3, rate: 1500, speed: 30, damage: 50, spread: 0,    count: 1, color: '#ff00ff', recoil: 20, ammo: 12, maxCarry: 36, pierce: true }
+        railgun:{ name: 'RAILGUN',tier: 3, rate: 1500, speed: 30, damage: 50, spread: 0,    count: 1, color: '#ff00ff', recoil: 0, ammo: 12, maxCarry: 36, pierce: true } 
     };
 
     let width, height;
     let camera = { x: 0, y: 0 };
-    let player = { x: 0, y: 0, vx: 0, vy: 0, hp: 100, maxHp: 100, angle: 0, weapon: 'pistol', ammo: Infinity, focus: 100, maxFocus: 100, focusActive: false };
+    let player = { x: 0, y: 0, vx: 0, vy: 0, hp: 100, maxHp: 100, angle: 0, weapon: 'pistol', ammo: Infinity, focus: 100, maxFocus: 100, focusActive: false, minigunWindup: 0, minigunSoundTimer: 0 };
     let bullets = [];
     let grenades = [];
     let enemies = [];
@@ -436,6 +486,7 @@
     let lastGrenadeTime = 0;
     let lastDashTime = 0;
     let lastSpawnTime = 0;
+    let lastNukeSpawnTime = -99999;
     
     let score = 0;
     let highScore = 0; 
@@ -444,6 +495,7 @@
     let shakeX = 0, shakeY = 0;
     let hitStop = 0;
     let noisePos = null; 
+    let nukeTimer = 0; 
     
     let arena = { x: 0, y: 0, w: 0, h: 0, targetW: 0, targetH: 0 };
 
@@ -492,11 +544,13 @@
         lastDashTime = -DASH_COOLDOWN;
         lastShotTime = 0; 
         lastSpawnTime = 0;
+        lastNukeSpawnTime = -99999;
         
         updateUI();
         document.getElementById('start-screen').style.display = 'none';
         document.getElementById('game-over').style.display = 'none';
         document.getElementById('dev-menu').style.display = 'none';
+        document.getElementById('warning-overlay').style.display = 'none';
         
         Audio.init();
         requestAnimationFrame(loop);
@@ -537,6 +591,15 @@
         }
     }
 
+    function spawnNukePickup() {
+        lastNukeSpawnTime = gameTime;
+        Audio.nukeSpawn();
+        const warning = document.getElementById('warning-overlay');
+        warning.style.display = 'block';
+        setTimeout(() => { warning.style.display = 'none'; }, 3000);
+        pickups.push(new Pickup(0, 0, 'nuke'));
+    }
+
     function detonateNuke(nx, ny) {
         const flash = document.getElementById('flash-overlay');
         flash.style.transition = 'none';
@@ -563,10 +626,9 @@
             
             if (dist < blastRadius) {
                 if (e.type === 'boss') {
-                    // Do not apply standard explosion logic to boss if it's the nuke that kills it, 
-                    // but if player triggered nuke, damage boss
-                    e.hp -= 50; 
+                    e.hp -= (e.maxHp / 7); 
                     for(let k=0; k<5; k++) particles.push(new Particle(e.x, e.y, '#ff0000', 5));
+                    if (e.hp <= 0) { e.dead = true; killEnemy(e, 0, true); enemies.splice(i, 1); }
                 } else if (!e.dead) {
                     e.dead = true;
                     killEnemy(e, 0, true);
@@ -576,7 +638,6 @@
         }
     }
 
-    // -- DEV FUNCTIONS --
     function toggleDevMenu() {
         const menu = document.getElementById('dev-menu');
         menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
@@ -584,31 +645,17 @@
 
     function devBossFight() {
         if (!isGameRunning) init();
-        wave = 20;
-        score = 500; 
-        
-        arena.targetW = WORLD_SIZE - 200;
-        arena.targetH = WORLD_SIZE - 200;
-        arena.w = arena.targetW;
-        arena.h = arena.targetH;
-        arena.x = (WORLD_SIZE - arena.w) / 2;
-        arena.y = (WORLD_SIZE - arena.h) / 2;
-
-        setWeapon('railgun');
-        player.ammo = WEAPONS.railgun.maxCarry;
-
-        enemies = [];
-        enemies.push(new Enemy('boss'));
-        
-        updateUI();
-        toggleDevMenu();
+        wave = 20; score = 500; 
+        arena.targetW = WORLD_SIZE - 200; arena.targetH = WORLD_SIZE - 200;
+        arena.w = arena.targetW; arena.h = arena.targetH;
+        arena.x = (WORLD_SIZE - arena.w) / 2; arena.y = (WORLD_SIZE - arena.h) / 2;
+        setWeapon('railgun'); player.ammo = WEAPONS.railgun.maxCarry;
+        enemies = []; enemies.push(new Enemy('boss')); enemies.push(new Enemy('boss'));
+        updateUI(); toggleDevMenu();
     }
 
     function devMaxAmmo() {
-        if(player.weapon !== 'pistol') {
-            player.ammo = WEAPONS[player.weapon].maxCarry;
-            updateUI();
-        }
+        if(player.weapon !== 'pistol') { player.ammo = WEAPONS[player.weapon].maxCarry; updateUI(); }
         toggleDevMenu();
     }
 
@@ -619,54 +666,32 @@
         btn.style.color = godMode ? '#00ff00' : '#fff';
     }
 
-    function devNuke() {
-        pickups.push(new Pickup(0, 0, 'nuke'));
-        toggleDevMenu();
-    }
+    function devNuke() { spawnNukePickup(); toggleDevMenu(); }
 
-    // Input Handlers
     const setKey = (k, v) => {
-        if(k === 'w' || k === 'W') keys.w = v;
-        if(k === 'a' || k === 'A') keys.a = v;
-        if(k === 's' || k === 'S') keys.s = v;
-        if(k === 'd' || k === 'D') keys.d = v;
-        if(k === ' ' || k === 'Space') keys.space = v;
-        if(k === 'Shift') keys.shift = v;
+        if(k === 'w' || k === 'W') keys.w = v; if(k === 'a' || k === 'A') keys.a = v;
+        if(k === 's' || k === 'S') keys.s = v; if(k === 'd' || k === 'D') keys.d = v;
+        if(k === ' ' || k === 'Space') keys.space = v; if(k === 'Shift') keys.shift = v;
     };
     
     window.addEventListener('keydown', e => {
         setKey(e.key, true);
         if (e.key === 'l' || e.key === 'L') toggleDevMenu();
-        if (e.key === 'Shift' && isGameRunning) {
-            if (!player.focusActive && player.focus >= player.maxFocus) {
-                player.focusActive = true;
-                Audio.slowMoStart();
-            }
-        }
+        if (e.key === 'Shift' && isGameRunning) { if (!player.focusActive && player.focus >= player.maxFocus) { player.focusActive = true; Audio.slowMoStart(); } }
     });
     window.addEventListener('keyup', e => setKey(e.key, false));
     window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-    window.addEventListener('mousedown', (e) => {
-        if (e.button === 0) mouse.left = true;
-        if (e.button === 2) mouse.right = true;
-    });
-    window.addEventListener('mouseup', (e) => {
-        if (e.button === 0) mouse.left = false;
-        if (e.button === 2) mouse.right = false;
-    });
+    window.addEventListener('mousedown', (e) => { if (e.button === 0) mouse.left = true; if (e.button === 2) mouse.right = true; });
+    window.addEventListener('mouseup', (e) => { if (e.button === 0) mouse.left = false; if (e.button === 2) mouse.right = false; });
 
     function setWeapon(type) {
-        player.weapon = type;
-        player.ammo = WEAPONS[type].ammo;
-        updateUI();
-        Audio.pickup();
+        player.weapon = type; player.ammo = WEAPONS[type].ammo; player.minigunWindup = 0;
+        updateUI(); Audio.pickup();
     }
     
     function addAmmo(type) {
-        const w = WEAPONS[type];
-        player.ammo = Math.min(w.maxCarry, player.ammo + w.ammo);
-        updateUI();
-        Audio.pickup();
+        const w = WEAPONS[type]; player.ammo = Math.min(w.maxCarry, player.ammo + w.ammo);
+        updateUI(); Audio.pickup();
     }
 
     function normalizeAngle(angle) {
@@ -676,44 +701,26 @@
     }
 
     class Bullet {
-        constructor(x, y, angle, speed, color, damage, explosive = false, pierce = false, isEnemy = false) {
-            this.x = x; this.y = y;
-            this.vx = Math.cos(angle) * speed;
-            this.vy = Math.sin(angle) * speed;
-            this.life = 60;
-            this.color = color;
-            this.damage = damage;
-            this.angle = angle;
-            this.explosive = explosive;
-            this.pierce = pierce;
-            this.isEnemy = isEnemy;
-            this.hitList = []; 
+        constructor(x, y, angle, speed, color, damage, explosive = false, pierce = false, isEnemy = false, weaponType = null) {
+            this.x = x; this.y = y; this.angle = angle;
+            this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+            this.life = 60; this.color = color; this.damage = damage;
+            this.explosive = explosive; this.pierce = pierce; this.isEnemy = isEnemy; this.hitList = []; 
+            this.weaponType = weaponType;
         }
         update(dt) {
-            this.x += this.vx * dt;
-            this.y += this.vy * dt;
-            this.life -= 1 * dt;
+            this.x += this.vx * dt; this.y += this.vy * dt; this.life -= 1 * dt;
         }
         draw(ctx) {
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.rotate(this.angle);
+            ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.angle);
             ctx.fillStyle = this.color;
             if (this.pierce) {
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(-40, -3, 80, 6);
-                ctx.fillStyle = this.color;
-                ctx.globalAlpha = 0.6;
-                ctx.fillRect(-50, -6, 100, 12);
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(-40, -3, 80, 6);
+                ctx.fillStyle = this.color; ctx.globalAlpha = 0.6; ctx.fillRect(-50, -6, 100, 12);
             } else if (this.explosive) {
-                ctx.fillRect(-8, -3, 16, 6);
-                ctx.fillStyle = '#ff8800';
-                ctx.fillRect(-8, -1, 4, 2); 
+                ctx.fillRect(-8, -3, 16, 6); ctx.fillStyle = '#ff8800'; ctx.fillRect(-8, -1, 4, 2); 
             } else if (this.isEnemy) {
-                ctx.fillStyle = '#ff0000';
-                ctx.beginPath();
-                ctx.arc(0, 0, 5, 0, Math.PI*2);
-                ctx.fill();
+                ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI*2); ctx.fill();
             } else {
                 ctx.fillRect(-6, -2, 12, 4);
             }
@@ -724,67 +731,46 @@
     class Grenade {
         constructor(x, y, angle) {
             this.x = x; this.y = y;
-            this.vx = Math.cos(angle) * 10;
-            this.vy = Math.sin(angle) * 10;
-            this.life = 60; 
-            this.radius = 6;
+            this.vx = Math.cos(angle) * 10; this.vy = Math.sin(angle) * 10;
+            this.life = 60; this.radius = 6;
         }
         update(dt) {
-            this.x += this.vx * dt;
-            this.y += this.vy * dt;
-            this.vx *= (1 - (0.05 * dt)); 
-            this.vy *= (1 - (0.05 * dt));
+            this.x += this.vx * dt; this.y += this.vy * dt;
+            this.vx *= (1 - (0.05 * dt)); this.vy *= (1 - (0.05 * dt));
             this.life -= 1 * dt;
         }
         draw(ctx) {
-            ctx.fillStyle = '#4488ff';
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
-            ctx.fill();
-            if (Math.floor(Date.now() / 100) % 2 === 0) {
-                ctx.fillStyle = '#fff';
-                ctx.beginPath();
-                ctx.arc(this.x+2, this.y-2, 2, 0, Math.PI*2);
-                ctx.fill();
-            }
+            ctx.fillStyle = '#4488ff'; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2); ctx.fill();
+            if (Math.floor(Date.now() / 100) % 2 === 0) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(this.x+2, this.y-2, 2, 0, Math.PI*2); ctx.fill(); }
         }
     }
 
     class Pickup {
         constructor(x, y, type) {
-            this.x = x; this.y = y;
-            this.type = type; 
-            this.life = 1080; 
-            this.bob = 0;
+            this.x = x; this.y = y; this.type = type; this.life = 1380; this.bob = 0;
             if (type === 'nuke') {
                 this.spawnSide = Math.random() < 0.5 ? 'left' : 'right';
-                this.y = arena.y + 100 + Math.random() * (arena.h - 200);
-                this.baseY = this.y;
-                if (this.spawnSide === 'left') { this.x = arena.x; this.dir = 1; } 
-                else { this.x = arena.x + arena.w; this.dir = -1; }
-                this.life = 1500; 
-                this.waveOffset = Math.random() * 100;
+                this.y = arena.y + 100 + Math.random() * (arena.h - 200); this.baseY = this.y;
+                if (this.spawnSide === 'left') { this.x = arena.x - 500; this.dir = 1; } else { this.x = arena.x + arena.w + 500; this.dir = -1; }
+                this.life = 3000; this.waveOffset = Math.random() * 100;
             }
         }
         update(dt) {
-            this.life -= 1 * dt;
-            this.bob += 0.1 * dt;
+            this.life -= 1 * dt; this.bob += 0.1 * dt;
             if (this.type === 'nuke') {
                 this.x += 2.0 * this.dir * dt; 
-                this.y = this.baseY + Math.sin((this.x * 0.005) + this.waveOffset) * 150;
-                this.y = Math.max(arena.y + 20, Math.min(arena.y + arena.h - 20, this.y));
+                this.y = this.baseY + Math.sin((this.x * 0.005) + this.waveOffset) * 100;
             }
         }
         draw(ctx) {
-            let yOff = Math.sin(this.bob) * 3;
-            let xOff = 0;
-            if (this.life < 180) {
-                xOff = (Math.random() - 0.5) * 4;
+            let yOff = Math.sin(this.bob) * 3; let xOff = 0;
+            if (this.life < 360) {
+                if (Math.floor(Date.now() / (this.life < 180 ? 50 : 200)) % 2 === 0) ctx.globalAlpha = 0.5;
+                if (this.life < 180) xOff = (Math.random() - 0.5) * 4;
             }
-            ctx.save();
-            ctx.translate(this.x + xOff, this.y + yOff);
+            ctx.save(); ctx.translate(this.x + xOff, this.y + yOff);
             if (this.type === 'nuke') {
-                ctx.fillStyle = '#ffff00';
+                ctx.globalAlpha = 1.0; ctx.fillStyle = '#ffff00';
                 ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill();
                 ctx.fillStyle = '#000'; ctx.font = '20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('☢', 0, 2);
                 ctx.shadowBlur = 15; ctx.shadowColor = '#ffff00'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); ctx.shadowBlur = 0;
@@ -792,78 +778,49 @@
                 ctx.fillStyle = '#fff'; ctx.fillRect(-10, -10, 20, 20);
                 ctx.fillStyle = '#00ff00'; ctx.fillRect(-3, -8, 6, 16); ctx.fillRect(-8, -3, 16, 6);
             } else {
-                const w = WEAPONS[this.type];
-                ctx.fillStyle = '#222'; ctx.fillRect(-12, -8, 24, 16);
+                const w = WEAPONS[this.type]; ctx.fillStyle = '#222'; ctx.fillRect(-12, -8, 24, 16);
                 ctx.fillStyle = w.color; ctx.font = '10px Arial'; ctx.fillText(w.name.substring(0,2), -8, 4);
                 ctx.strokeStyle = w.color; ctx.strokeRect(-12, -8, 24, 16);
             }
-            ctx.restore();
+            ctx.restore(); ctx.globalAlpha = 1.0;
         }
     }
 
     class Debris {
         constructor(x, y, color) {
             this.x = x; this.y = y;
-            const angle = Math.random() * Math.PI * 2;
-            const speed = Math.random() * 8 + 2;
-            this.vx = Math.cos(angle) * speed;
-            this.vy = Math.sin(angle) * speed;
-            this.rotation = Math.random() * Math.PI * 2;
-            this.rotSpeed = (Math.random() - 0.5) * 0.5;
-            this.life = 1.0;
-            this.color = color;
-            this.size = 4 + Math.random() * 6;
-            this.w = this.size;
-            this.h = this.size * 0.6; 
+            const angle = Math.random() * Math.PI * 2; const speed = Math.random() * 8 + 2;
+            this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+            this.rotation = Math.random() * Math.PI * 2; this.rotSpeed = (Math.random() - 0.5) * 0.5;
+            this.life = 1.0; this.color = color; this.size = 4 + Math.random() * 6; this.w = this.size; this.h = this.size * 0.6; 
         }
         update(dt) {
-            this.x += this.vx * dt;
-            this.y += this.vy * dt;
-            this.vx *= (1 - (0.1 * dt)); 
-            this.vy *= (1 - (0.1 * dt));
-            this.rotation += this.rotSpeed * dt;
-            this.rotSpeed *= (1 - (0.05 * dt));
-            if (Math.abs(this.vx) < 0.1 && Math.abs(this.vy) < 0.1) {
-                this.life -= 0.05 * dt; 
-            }
+            this.x += this.vx * dt; this.y += this.vy * dt;
+            this.vx *= (1 - (0.1 * dt)); this.vy *= (1 - (0.1 * dt));
+            this.rotation += this.rotSpeed * dt; this.rotSpeed *= (1 - (0.05 * dt));
+            if (Math.abs(this.vx) < 0.1 && Math.abs(this.vy) < 0.1) this.life -= 0.05 * dt; 
         }
         draw(ctx) {
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.rotate(this.rotation);
-            ctx.fillStyle = this.color;
-            ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
+            ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rotation);
+            ctx.fillStyle = this.color; ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
             ctx.restore();
         }
     }
 
     class Enemy {
         constructor(typeOverride) {
-            this.type = 'zombie';
-            this.facing = 0; 
-            this.dead = false; 
+            this.type = 'zombie'; this.facing = 0; this.dead = false; 
             
-            // Boss Variables
-            this.bossState = 'chase'; 
-            this.bossTimer = 0;
-            this.chargeDir = {x:0, y:0};
-            this.chargeCooldown = 900 + Math.random() * 1500; 
+            this.bossState = 'chase'; this.bossTimer = 0; this.chargeDir = {x:0, y:0}; this.chargeCooldown = 900 + Math.random() * 1500; 
+
+            this.tankState = 'stroll'; this.tankTimer = 60 + Math.random() * 120; this.aggroTime = 0;
             
-            if (typeOverride) {
-                this.type = typeOverride;
-            } else {
+            if (typeOverride) { this.type = typeOverride; } 
+            else {
                 const r = Math.random();
-                if (wave < 5) {
-                    this.type = 'zombie';
-                } else if (wave < 10) {
-                    this.type = r < 0.3 ? 'flanker' : 'zombie';
-                    if (wave > 7 && r < 0.05) this.type = 'tank';
-                } else {
-                    if (r < 0.4) this.type = 'zombie';
-                    else if (r < 0.7) this.type = 'flanker';
-                    else if (r < 0.9) this.type = 'blind';
-                    else this.type = 'tank';
-                }
+                if (wave < 5) this.type = 'zombie';
+                else if (wave < 10) { this.type = r < 0.3 ? 'flanker' : 'zombie'; if (wave > 7 && r < 0.05) this.type = 'tank'; } 
+                else { if (r < 0.4) this.type = 'zombie'; else if (r < 0.7) this.type = 'flanker'; else if (r < 0.9) this.type = 'blind'; else this.type = 'tank'; }
             }
 
             if (this.type === 'boss') Audio.spawnBoss();
@@ -872,43 +829,55 @@
             else if (this.type === 'blind') Audio.spawnBlind();
 
             const spawnDist = this.type === 'boss' ? 200 : 40;
-            if (Math.random() < 0.5) {
-                this.x = arena.x + Math.random() * arena.w;
-                this.y = Math.random() < 0.5 ? arena.y - spawnDist : arena.y + arena.h + spawnDist;
-            } else {
-                this.x = Math.random() < 0.5 ? arena.x - spawnDist : arena.x + arena.w + spawnDist;
-                this.y = arena.y + Math.random() * arena.h;
-            }
+            if (Math.random() < 0.5) { this.x = arena.x + Math.random() * arena.w; this.y = Math.random() < 0.5 ? arena.y - spawnDist : arena.y + arena.h + spawnDist; } 
+            else { this.x = Math.random() < 0.5 ? arena.x - spawnDist : arena.x + arena.w + spawnDist; this.y = arena.y + Math.random() * arena.h; }
 
             this.vx = 0; this.vy = 0;
-            switch(this.type) {
-                case 'zombie': this.hp = 2 + Math.floor(wave/5); this.speed = (0.5 + Math.random() * 0.5) * 0.8; this.radius = 12; this.color = '#448844'; break;
-                case 'tank': this.hp = 25 + (wave * 2); this.speed = 1.1; this.radius = 26; this.color = '#3e2723'; break;
-                case 'flanker': this.hp = 4 + wave; this.speed = (2.2) * 0.8; this.radius = 12; this.color = '#aa33ff'; this.flankDir = Math.random() < 0.5 ? 1 : -1; break;
-                case 'blind': this.hp = 8 + wave; this.speed = (3.0) * 0.8; this.radius = 14; this.color = '#888888'; break;
-                case 'boss': this.hp = 5000 + (wave * 200); this.speed = 0.8; this.radius = 100; this.color = '#1f101f'; break;
+            
+            if (this.type === 'tank') {
+                 const tx = arena.x + arena.w/2 + (Math.random()-0.5)*100;
+                 const ty = arena.y + arena.h/2 + (Math.random()-0.5)*100;
+                 this.facing = Math.atan2(ty - this.y, tx - this.x);
+                 this.hp = 25 + (wave * 2); this.speed = 1.1; this.radius = 26; this.color = '#3e2723';
+            } else {
+                switch(this.type) {
+                    case 'zombie': this.hp = 2 + Math.floor(wave/5); this.speed = (0.5 + Math.random() * 0.5) * 0.8; this.radius = 12; this.color = '#448844'; break;
+                    // FLANKER NERF: Speed * 0.9
+                    case 'flanker': this.hp = (4 + wave) * 0.7; this.speed = (2.2) * 0.8 * 0.9; this.radius = 12; this.color = '#aa33ff'; this.flankDir = Math.random() < 0.5 ? 1 : -1; break;
+                    case 'blind': this.hp = 8 + wave; this.speed = (3.0) * 0.8; this.radius = 14; this.color = '#888888'; break;
+                    case 'boss': this.hp = 5000 + (wave * 200); this.speed = 0.8; this.radius = 100; this.color = '#1f101f'; break;
+                }
             }
             this.maxHp = this.hp; 
         }
 
         update(dt) {
-            let dx = player.x - this.x;
-            let dy = player.y - this.y;
-            let dist = Math.sqrt(dx*dx + dy*dy);
-            let targetAngle = Math.atan2(dy, dx);
+            let dx = player.x - this.x; let dy = player.y - this.y;
+            let dist = Math.sqrt(dx*dx + dy*dy); let targetAngle = Math.atan2(dy, dx);
             
+            // BOSS AI
             if (this.type === 'boss') {
+                if (this.bossState === 'charge') {
+                     for(let other of enemies) {
+                         if (other === this) continue;
+                         if (other.type === 'boss' && Math.hypot(this.x - other.x, this.y - other.y) < this.radius + other.radius + 10) {
+                             Audio.bossClash();
+                             shakeX = 40; shakeY = 40;
+                             this.bossState = 'chase'; other.bossState = 'chase';
+                             this.vx = -this.chargeDir.x * 20; this.vy = -this.chargeDir.y * 20;
+                             other.vx = -other.chargeDir.x * 20; other.vy = -other.chargeDir.y * 20;
+                             this.hp -= 2000; other.hp -= 2000; 
+                             createExplosion((this.x+other.x)/2, (this.y+other.y)/2);
+                         }
+                     }
+                }
+
                 if (this.bossState === 'chase') {
                     let delta = normalizeAngle(targetAngle - this.facing);
                     this.facing += Math.sign(delta) * 0.008 * dt;
-                    this.vx += Math.cos(this.facing) * 0.05 * dt;
-                    this.vy += Math.sin(this.facing) * 0.05 * dt;
+                    this.vx += Math.cos(this.facing) * 0.05 * dt; this.vy += Math.sin(this.facing) * 0.05 * dt;
                     this.bossTimer += dt;
-                    if (this.bossTimer > this.chargeCooldown) { 
-                        this.bossState = 'charge_prep';
-                        this.bossTimer = 0;
-                        Audio.bossCharge();
-                    }
+                    if (this.bossTimer > this.chargeCooldown) { this.bossState = 'charge_prep'; this.bossTimer = 0; Audio.bossCharge(); }
                 } 
                 else if (this.bossState === 'charge_prep') {
                     this.vx *= 0.8; this.vy *= 0.8;
@@ -916,17 +885,14 @@
                     this.facing += Math.sign(delta) * 0.1 * dt;
                     this.bossTimer += dt;
                     if (this.bossTimer > 120) { 
-                        this.bossState = 'charge';
-                        this.bossTimer = 0;
-                        this.chargeDir.x = Math.cos(this.facing);
-                        this.chargeDir.y = Math.sin(this.facing);
+                        this.bossState = 'charge'; this.bossTimer = 0;
+                        this.chargeDir.x = Math.cos(this.facing); this.chargeDir.y = Math.sin(this.facing);
                         this.chargeCooldown = 900 + Math.random() * 1500; 
                     }
                 } 
                 else if (this.bossState === 'charge') {
                     const chargeSpeed = 11;
-                    this.x += this.chargeDir.x * chargeSpeed * dt;
-                    this.y += this.chargeDir.y * chargeSpeed * dt;
+                    this.x += this.chargeDir.x * chargeSpeed * dt; this.y += this.chargeDir.y * chargeSpeed * dt;
                     
                     for (let other of enemies) {
                         if (other === this) continue;
@@ -934,11 +900,15 @@
                         const odist = Math.sqrt(odx*odx + ody*ody);
                         if (odist < this.radius + other.radius + 20) {
                              const angle = Math.atan2(ody, odx);
-                             const force = (other.type === 'tank') ? 5 : 30; // REDUCED YEET
-                             other.vx += Math.cos(angle) * force * dt;
-                             other.vy += Math.sin(angle) * force * dt;
-                             other.hp -= 5; 
-                             if (other.hp <= 0 && !other.dead) { other.dead = true; killEnemy(other, angle); }
+                             if (other.type === 'tank') {
+                                 other.hp = 0; other.dead = true; killEnemy(other, angle);
+                                 Audio.tankDeath(); createExplosion(other.x, other.y);
+                             } else {
+                                 const force = 30; 
+                                 other.vx += Math.cos(angle) * force * dt; other.vy += Math.sin(angle) * force * dt;
+                                 other.hp -= 5; 
+                                 if (other.hp <= 0 && !other.dead) { other.dead = true; killEnemy(other, angle); }
+                             }
                         }
                     }
                     if (this.x < arena.x || this.x > arena.x + arena.w || this.y < arena.y || this.y > arena.y + arena.h) {
@@ -960,8 +930,7 @@
                     updateUI(); Audio.hit();
                     const angle = Math.atan2(player.y - this.y, player.x - this.x);
                     const force = this.bossState === 'charge' ? 80 : 15;
-                    player.vx += Math.cos(angle) * force;
-                    player.vy += Math.sin(angle) * force;
+                    player.vx += Math.cos(angle) * force; player.vy += Math.sin(angle) * force;
                     shakeX = 10; shakeY = 10;
                     if (player.hp <= 0) endGame();
                 }
@@ -970,15 +939,38 @@
 
             this.vx *= (1 - (0.2 * dt)); this.vy *= (1 - (0.2 * dt));
             let moveX = 0, moveY = 0;
+            
             if (dist > 0) {
                 let ndx = dx / dist; let ndy = dy / dist;
+                
                 if (this.type === 'tank') {
-                    let delta = normalizeAngle(targetAngle - this.facing);
-                    const turnSpeed = 0.005 * dt; 
-                    if (Math.abs(delta) < turnSpeed) this.facing = targetAngle;
-                    else this.facing += Math.sign(delta) * turnSpeed;
-                    moveX = Math.cos(this.facing); moveY = Math.sin(this.facing);
-                } else if (this.type === 'flanker') {
+                    if (this.tankState === 'aggro') {
+                        let delta = normalizeAngle(targetAngle - this.facing);
+                        const turnSpeed = 0.005 * dt; 
+                        if (Math.abs(delta) < turnSpeed) this.facing = targetAngle;
+                        else this.facing += Math.sign(delta) * turnSpeed;
+                        moveX = Math.cos(this.facing); moveY = Math.sin(this.facing);
+                        this.aggroTime -= dt;
+                        if (this.aggroTime <= 0) { this.tankState = 'idle'; this.tankTimer = 60 + Math.random() * 60; }
+                    } else if (this.tankState === 'stroll') {
+                        moveX = Math.cos(this.facing) * 0.4; moveY = Math.sin(this.facing) * 0.4;
+                        this.tankTimer -= dt;
+                        const pad = 100;
+                        if (this.x < arena.x + pad || this.x > arena.x + arena.w - pad || 
+                            this.y < arena.y + pad || this.y > arena.y + arena.h - pad) {
+                             const cx = arena.x + arena.w/2; const cy = arena.y + arena.h/2;
+                             this.facing = Math.atan2(cy - this.y, cx - this.x) + (Math.random()-0.5);
+                        }
+                        if (this.tankTimer <= 0) { this.tankState = 'idle'; this.tankTimer = 60 + Math.random() * 120; }
+                    } else {
+                        moveX = 0; moveY = 0; this.tankTimer -= dt;
+                        if (this.tankTimer <= 0) {
+                            this.tankState = 'stroll'; this.tankTimer = 120 + Math.random() * 120;
+                            this.facing = Math.random() * Math.PI * 2;
+                        }
+                    }
+                } 
+                else if (this.type === 'flanker') {
                     moveX = ndx + (-ndy * 0.8 * this.flankDir); moveY = ndy + (ndx * 0.8 * this.flankDir);
                     this.facing = Math.atan2(moveY, moveX);
                 } else if (this.type === 'blind') {
@@ -986,19 +978,16 @@
                         let nDx = noisePos.x - this.x; let nDy = noisePos.y - this.y;
                         let nDist = Math.sqrt(nDx*nDx + nDy*nDy);
                         if (nDist > 5) { moveX = nDx / nDist; moveY = nDy / nDist; this.facing = Math.atan2(moveY, moveX); }
-                    } else {
-                         moveX = (Math.random() - 0.5) * 0.2; moveY = (Math.random() - 0.5) * 0.2; this.facing += (Math.random()-0.5)*0.1 * dt;
-                    }
+                    } else { moveX = (Math.random() - 0.5) * 0.2; moveY = (Math.random() - 0.5) * 0.2; this.facing += (Math.random()-0.5)*0.1 * dt; }
                 } else {
                     moveX = ndx; moveY = ndy; this.facing = targetAngle;
                 }
                 const moveLen = Math.sqrt(moveX*moveX + moveY*moveY);
                 if (moveLen > 0 && this.type !== 'tank') { moveX /= moveLen; moveY /= moveLen; }
-                if (Math.abs(this.vx) < 1 && Math.abs(this.vy) < 1) {
-                    this.x += moveX * this.speed * dt; this.y += moveY * this.speed * dt;
-                }
+                if (Math.abs(this.vx) < 1 && Math.abs(this.vy) < 1) { this.x += moveX * this.speed * dt; this.y += moveY * this.speed * dt; }
             }
             this.x += this.vx * dt; this.y += this.vy * dt;
+            
             for (let other of enemies) {
                 if (other === this) continue;
                 const dx2 = this.x - other.x; const dy2 = this.y - other.y;
@@ -1018,18 +1007,13 @@
             if (this.type === 'boss') {
                 ctx.rotate(this.facing);
                 
-                ctx.fillStyle = '#00ffff'; 
-                ctx.beginPath(); ctx.arc(-this.radius + 10, 0, 15, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
-                ctx.beginPath(); ctx.arc(-this.radius + 10, 0, 25 + Math.sin(Date.now()/100)*5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#00ffff'; ctx.beginPath(); ctx.arc(-this.radius + 10, 0, 15, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'rgba(0, 255, 255, 0.5)'; ctx.beginPath(); ctx.arc(-this.radius + 10, 0, 25 + Math.sin(Date.now()/100)*5, 0, Math.PI*2); ctx.fill();
 
                 if (this.bossState === 'charge_prep') {
-                     ctx.shadowBlur = 30; ctx.shadowColor = '#ff0000';
-                     ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                     ctx.shadowBlur = 30; ctx.shadowColor = '#ff0000'; ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
                      ctx.beginPath(); ctx.arc(0, 0, this.radius + 20, 0, Math.PI*2); ctx.fill();
-                } else {
-                     ctx.shadowBlur = 0;
-                }
+                } else { ctx.shadowBlur = 0; }
 
                 const pulse = Math.sin(Date.now() / 200) * 3;
                 ctx.fillStyle = this.bossState === 'charge_prep' ? '#500' : '#303';
@@ -1043,33 +1027,20 @@
                 }
                 ctx.closePath(); ctx.fill();
 
-                // EYES HP LOGIC
                 ctx.shadowBlur = 0; 
                 const eyePositions = [
                     {x: 25, y: -15, r: 9}, {x: 35, y: 8, r: 11}, {x: 15, y: 22, r: 7},
                     {x: 50, y: -8, r: 6}, {x: 8, y: -30, r: 7}, {x: -15, y: 8, r: 6}, {x: 15, y: 0, r: 5}
                 ];
-                
-                // Calculate how many eyes are still "alive" (Yellow) based on HP
-                // If HP is 100%, indexLimit is 7. If HP is 0%, indexLimit is 0.
                 const aliveEyesCount = Math.ceil((this.hp / this.maxHp) * eyePositions.length);
-
                 eyePositions.forEach((eye, index) => {
                     ctx.beginPath();
                     let jx = this.bossState === 'charge_prep' ? (Math.random()-0.5)*3 : 0;
                     let jy = this.bossState === 'charge_prep' ? (Math.random()-0.5)*3 : 0;
-                    
-                    // If current eye index is less than alive count, it's alive (Yellow). Else Dead (Red/Dark)
-                    if (index < aliveEyesCount) {
-                        ctx.fillStyle = '#ffaa00'; 
-                    } else {
-                        ctx.fillStyle = '#440000'; // Dead eye socket
-                    }
-                    
+                    if (index < aliveEyesCount) { ctx.fillStyle = '#ffaa00'; } else { ctx.fillStyle = '#440000'; }
                     ctx.arc(eye.x + jx, eye.y + jy, eye.r, 0, Math.PI*2);
                     ctx.fill();
                 });
-                
                 if (this.bossState === 'charge') {
                     ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
                     ctx.fillRect(-this.radius*1.5, -this.radius, this.radius, this.radius*2);
@@ -1078,20 +1049,15 @@
             }
             else if (this.type === 'tank') {
                 ctx.rotate(this.facing);
-                ctx.fillStyle = this.color;
-                ctx.beginPath(); ctx.ellipse(0, 0, this.radius+5, this.radius-5, 0, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#281a17';
-                ctx.beginPath(); ctx.arc(10, 0, this.radius-8, -Math.PI/2, Math.PI/2); ctx.fill();
-                ctx.fillStyle = '#ff9900';
+                ctx.fillStyle = this.color; ctx.beginPath(); ctx.ellipse(0, 0, this.radius+5, this.radius-5, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#281a17'; ctx.beginPath(); ctx.arc(10, 0, this.radius-8, -Math.PI/2, Math.PI/2); ctx.fill();
+                ctx.fillStyle = this.tankState === 'aggro' ? '#ff0000' : '#ff9900';
                 ctx.beginPath(); ctx.arc(-15, 0, 8, 0, Math.PI*2); ctx.fill();
             } 
             else {
-                ctx.rotate(this.facing);
-                ctx.fillStyle = this.color;
-                ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill();
+                ctx.rotate(this.facing); ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2); ctx.fill();
                 if (this.type !== 'blind') {
-                    ctx.fillStyle = '#ffff00';
-                    ctx.beginPath(); ctx.arc(6, 4, 3, 0, Math.PI*2); ctx.arc(6, -4, 3, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.arc(6, 4, 3, 0, Math.PI*2); ctx.arc(6, -4, 3, 0, Math.PI*2); ctx.fill();
                 } else if (this.type === 'blind') {
                     ctx.strokeStyle = '#333'; ctx.beginPath(); ctx.arc(0,0, this.radius-4, 0, Math.PI*2); ctx.stroke();
                 }
@@ -1103,14 +1069,9 @@
     class Particle {
         constructor(x, y, color, speed, friction = 0.9) {
             this.x = x; this.y = y;
-            const angle = Math.random() * Math.PI * 2;
-            const vel = Math.random() * speed;
-            this.vx = Math.cos(angle) * vel;
-            this.vy = Math.sin(angle) * vel;
-            this.life = 1.0;
-            this.decay = 0.02 + Math.random() * 0.03;
-            this.color = color;
-            this.friction = friction;
+            const angle = Math.random() * Math.PI * 2; const vel = Math.random() * speed;
+            this.vx = Math.cos(angle) * vel; this.vy = Math.sin(angle) * vel;
+            this.life = 1.0; this.decay = 0.02 + Math.random() * 0.03; this.color = color; this.friction = friction;
         }
         update(dt) {
             this.x += this.vx * dt; this.y += this.vy * dt;
@@ -1118,10 +1079,7 @@
             this.life -= this.decay * dt;
         }
         draw(ctx) {
-            ctx.globalAlpha = this.life;
-            ctx.fillStyle = this.color;
-            ctx.fillRect(this.x, this.y, 4, 4);
-            ctx.globalAlpha = 1.0;
+            ctx.globalAlpha = this.life; ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y, 4, 4); ctx.globalAlpha = 1.0;
         }
     }
 
@@ -1131,8 +1089,7 @@
 
         let dt = 1.0;
         if (player.focusActive) {
-            dt = SLOW_MO_FACTOR;
-            player.focus -= FOCUS_DRAIN;
+            dt = SLOW_MO_FACTOR; player.focus -= FOCUS_DRAIN;
             if (player.focus <= 0) { player.focus = 0; player.focusActive = false; Audio.slowMoEnd(); }
         } else {
             if (player.focus < player.maxFocus) { player.focus += FOCUS_REGEN; if (player.focus > player.maxFocus) player.focus = player.maxFocus; }
@@ -1182,12 +1139,36 @@
         const mouseWorldX = mouse.x + camera.x; const mouseWorldY = mouse.y + camera.y;
         player.angle = Math.atan2(mouseWorldY - player.y, mouseWorldX - player.x);
 
-        if (mouse.left && gameTime - lastShotTime > wp.rate) {
+        let shouldFire = false;
+        if (mouse.left) {
+            if (player.weapon === 'minigun') {
+                if (player.minigunWindup === 0) Audio.minigunWindup();
+                
+                player.minigunWindup += dt * 16.6;
+                player.minigunSoundTimer += dt * 16.6;
+                if (player.minigunSoundTimer > 100) { Audio.minigunSpin(); player.minigunSoundTimer = 0; }
+                
+                if (player.minigunWindup > 500) shouldFire = true;
+            } else {
+                shouldFire = true;
+            }
+        } else {
+            player.minigunWindup = 0;
+        }
+
+        if (shouldFire && gameTime - lastShotTime > wp.rate) {
             if (player.ammo > 0) {
                 const mx = player.x + Math.cos(player.angle) * 20; const my = player.y + Math.sin(player.angle) * 20;
+                
+                let spreadFactor = wp.spread;
+                if (player.weapon === 'minigun') {
+                    const speed = Math.hypot(player.vx, player.vy);
+                    spreadFactor = 0.01 + (speed * 0.15); 
+                }
+
                 for(let i=0; i<wp.count; i++) {
-                    const spread = (Math.random() - 0.5) * wp.spread;
-                    bullets.push(new Bullet(mx, my, player.angle + spread, wp.speed, wp.color, wp.damage, wp.explosive, wp.pierce));
+                    const spread = (Math.random() - 0.5) * spreadFactor;
+                    bullets.push(new Bullet(mx, my, player.angle + spread, wp.speed, wp.color, wp.damage, wp.explosive, wp.pierce, false, player.weapon));
                 }
                 player.vx -= Math.cos(player.angle) * wp.recoil; player.vy -= Math.sin(player.angle) * wp.recoil;
                 shakeX = Math.cos(player.angle + Math.PI) * wp.recoil; shakeY = Math.sin(player.angle + Math.PI) * wp.recoil;
@@ -1234,11 +1215,27 @@
             lastSpawnTime = gameTime;
         }
 
-        if (wave >= 10 && Math.random() < 0.0001) { Audio.nukeSpawn(); pickups.push(new Pickup(0, 0, 'nuke')); }
+        let nukeInPlay = false; for(let p of pickups) { if(p.type === 'nuke') nukeInPlay = true; }
+        if (wave >= 10 && !nukeInPlay && (gameTime - lastNukeSpawnTime > 45000)) { if (Math.random() < 0.0001) spawnNukePickup(); }
+
+        let nukeDist = 99999;
+        for (let i = pickups.length - 1; i >= 0; i--) {
+            pickups[i].update(dt); if (pickups[i].life <= 0) { pickups.splice(i, 1); continue; }
+            if (pickups[i].type === 'nuke') { const d = Math.hypot(pickups[i].x - player.x, pickups[i].y - player.y); if (d < nukeDist) nukeDist = d; }
+            if (Math.hypot(player.x - pickups[i].x, player.y - pickups[i].y) < 20) {
+                const p = pickups[i];
+                if (p.type === 'nuke') detonateNuke(p.x, p.y);
+                else if (p.type === 'medikit') { player.hp = Math.min(player.maxHp, player.hp + 25); updateUI(); Audio.pickup(); for(let k=0; k<10; k++) particles.push(new Particle(player.x, player.y, '#00ff00', 5)); }
+                else {
+                    if (player.weapon === p.type) addAmmo(p.type); else setWeapon(p.type);
+                    for(let k=0; k<10; k++) particles.push(new Particle(player.x, player.y, '#ffff00', 5));
+                }
+                pickups.splice(i, 1);
+            }
+        }
 
         for (let i = enemies.length - 1; i >= 0; i--) {
-            let e = enemies[i];
-            if (e.dead) { enemies.splice(i, 1); continue; }
+            let e = enemies[i]; if (e.dead) { enemies.splice(i, 1); continue; }
             e.update(dt);
             for (let j = bullets.length - 1; j >= 0; j--) {
                 let b = bullets[j]; if (b.isEnemy) continue;
@@ -1249,33 +1246,32 @@
                 if (dist < e.radius + 10) {
                     let damageCalc = b.damage;
                     if (e.type === 'tank') {
+                         e.tankState = 'aggro'; e.aggroTime = 300; 
                          let diff = Math.abs(normalizeAngle(b.angle - e.facing));
                          if (diff < Math.PI / 3) { damageCalc *= 5; Audio.crit(); for(let k=0; k<5; k++) particles.push(new Particle(e.x, e.y, '#ffaa00', 8)); }
                     } else if (e.type === 'boss') {
                         let hitAngle = Math.atan2(b.y - e.y, b.x - e.x);
                         let diff = Math.abs(normalizeAngle(hitAngle - e.facing));
                         if (diff > 2.0) { damageCalc *= 3; Audio.weakPoint(); for(let k=0; k<8; k++) particles.push(new Particle(b.x, b.y, '#00ffff', 10)); }
+                        
+                        // RAILGUN SPECIAL BOSS DAMAGE (1/30th of HP)
+                        if (b.weaponType === 'railgun') { 
+                            damageCalc = e.maxHp / 30; // 30 shots to kill
+                            Audio.bossZap(); 
+                            for(let k=0; k<5; k++) particles.push(new Particle(b.x, b.y, '#ff00ff', 15)); 
+                        }
                     }
                     e.hp -= damageCalc;
                     if (b.explosive) { createExplosion(b.x, b.y); bullets.splice(j, 1); } 
                     else if (b.pierce) { b.hitList.push(e); for(let k=0; k<3; k++) particles.push(new Particle(e.x, e.y, e.color, 5)); } 
                     else {
-                        if (e.type !== 'boss') {
-                            const kb = (e.type === 'tank' ? 2 : 8); e.vx += Math.cos(b.angle) * kb; e.vy += Math.sin(b.angle) * kb;
-                        }
+                        if (e.type !== 'boss') { const kb = (e.type === 'tank' ? 2 : 8); e.vx += Math.cos(b.angle) * kb; e.vy += Math.sin(b.angle) * kb; }
                         bullets.splice(j, 1); for(let k=0; k<3; k++) particles.push(new Particle(e.x, e.y, e.color, 5));
                     }
                     noisePos = { x: e.x, y: e.y }; Audio.hit();
                     if (e.hp <= 0 && !e.dead) { 
                         e.dead = true; 
-                        // TRIGGER NUKE IF BOSS DIES
-                        if (e.type === 'boss') {
-                             detonateNuke(e.x, e.y);
-                             // Force kill boss logic (no normal killEnemy call to avoid double score/drops weirdness if handled inside detonate)
-                             // Actually detonateNuke will handle damage, but since we are here, we can just spawn explosion visual and let update loop remove it
-                        } else {
-                             killEnemy(e, b.angle); 
-                        }
+                        if (e.type === 'boss') { detonateNuke(e.x, e.y); } else { killEnemy(e, b.angle); }
                         enemies.splice(i, 1); hitStop = 2; break; 
                     }
                     if (e.dead) { enemies.splice(i, 1); break; }
@@ -1295,18 +1291,9 @@
             }
         }
 
-        for (let i = pickups.length - 1; i >= 0; i--) {
-            pickups[i].update(dt); if (pickups[i].life <= 0) { pickups.splice(i, 1); continue; }
-            if (Math.hypot(player.x - pickups[i].x, player.y - pickups[i].y) < 20) {
-                const p = pickups[i];
-                if (p.type === 'nuke') detonateNuke(p.x, p.y);
-                else if (p.type === 'medikit') { player.hp = Math.min(player.maxHp, player.hp + 25); updateUI(); Audio.pickup(); for(let k=0; k<10; k++) particles.push(new Particle(player.x, player.y, '#00ff00', 5)); }
-                else {
-                    if (player.weapon === p.type) addAmmo(p.type); else setWeapon(p.type);
-                    for(let k=0; k<10; k++) particles.push(new Particle(player.x, player.y, '#ffff00', 5));
-                }
-                pickups.splice(i, 1);
-            }
+        if (nukeInPlay) {
+            nukeTimer += dt; const pingDelay = Math.max(10, nukeDist / 100 * 3); 
+            if (nukeTimer > pingDelay) { nukeTimer = 0; const vol = Math.max(0.1, 1.0 - (nukeDist/1500)); Audio.nukePing(vol); }
         }
 
         if (particles.length > MAX_PARTICLES) particles.splice(0, particles.length - MAX_PARTICLES);
@@ -1327,7 +1314,9 @@
             if (dist < range) {
                 const damage = (1 - (dist/range)) * 30; e.hp -= damage;
                 const angle = Math.atan2(e.y - y, e.x - x);
-                const force = (1 - (dist/range)) * 30; e.vx += Math.cos(angle) * force; e.vy += Math.sin(angle) * force;
+                const forceMult = e.type === 'boss' ? 0.05 : 1.0;
+                const force = (1 - (dist/range)) * 30 * forceMult;
+                e.vx += Math.cos(angle) * force; e.vy += Math.sin(angle) * force;
                 if (e.hp <= 0 && !e.dead) { e.dead = true; killEnemy(e, angle); }
             }
         }
@@ -1348,7 +1337,17 @@
         if (drop) { 
             let isWeapon = false; if (e.type === 'tank') isWeapon = Math.random() < 0.8; else { let weaponChance = player.weapon === 'pistol' ? 0.6 : 0.3; isWeapon = Math.random() < weaponChance; }
             if (isWeapon) {
-                let choices = []; if (wave < 5) choices = ['smg', 'shotgun']; else if (wave < 10) choices = ['smg', 'shotgun', 'minigun', 'rocket']; else choices = ['minigun', 'rocket', 'railgun'];
+                let choices = []; 
+                if (wave < 5) choices = ['smg', 'shotgun']; 
+                else if (wave < 10) choices = ['smg', 'shotgun', 'minigun', 'rocket']; 
+                else choices = ['minigun', 'rocket', 'railgun'];
+                
+                // BIAS: If player weapon is in pool, add it 2 more times to increase drop chance
+                if (choices.includes(player.weapon)) {
+                    choices.push(player.weapon);
+                    choices.push(player.weapon);
+                }
+
                 const pick = choices[Math.floor(Math.random() * choices.length)]; pickups.push(new Pickup(e.x, e.y, pick));
             } else pickups.push(new Pickup(e.x, e.y, 'medikit'));
         } else if (Math.random() < 0.05) pickups.push(new Pickup(e.x, e.y, 'medikit'));
@@ -1364,7 +1363,6 @@
     }
 
     function draw() {
-        // MAIN LOOP DRAWING (High Performance)
         ctx.fillStyle = '#050505';
         ctx.fillRect(0, 0, width, height);
         
@@ -1373,27 +1371,15 @@
         const camY = camera.y + shakeY;
         ctx.translate(-camX, -camY);
 
-        // 1. Draw Grid Lines Efficiently (Instead of blitting massive images)
-        // Background Grid
         ctx.strokeStyle = '#121212';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        
-        // Optimize loop: only draw lines visible in camera view
-        const startX = Math.floor(camX / 50) * 50;
-        const endX = startX + width + 50;
-        const startY = Math.floor(camY / 50) * 50;
-        const endY = startY + height + 50;
-
-        for(let x = startX; x <= endX; x += 50) {
-            ctx.moveTo(x, camY); ctx.lineTo(x, camY + height);
-        }
-        for(let y = startY; y <= endY; y += 50) {
-            ctx.moveTo(camX, y); ctx.lineTo(camX + width, y);
-        }
+        const startX = Math.floor(camX / 50) * 50; const endX = startX + width + 50;
+        const startY = Math.floor(camY / 50) * 50; const endY = startY + height + 50;
+        for(let x = startX; x <= endX; x += 50) { ctx.moveTo(x, camY); ctx.lineTo(x, camY + height); }
+        for(let y = startY; y <= endY; y += 50) { ctx.moveTo(camX, y); ctx.lineTo(camX + width, y); }
         ctx.stroke();
 
-        // 2. Render Blood/Debris Overlays (Transparent chunks)
         chunkManager.render(ctx, {x: camX, y: camY});
 
         ctx.strokeStyle = '#331111'; ctx.lineWidth = 8; ctx.strokeRect(arena.x, arena.y, arena.w, arena.h);
@@ -1401,9 +1387,9 @@
 
         pickups.forEach(p => p.draw(ctx));
         grenades.forEach(g => g.draw(ctx));
-        bullets.forEach(b => b.draw(ctx));
         debris.forEach(d => d.draw(ctx)); 
         enemies.forEach(e => e.draw(ctx));
+        bullets.forEach(b => b.draw(ctx));
 
         ctx.save();
         ctx.translate(player.x, player.y); ctx.rotate(player.angle);
@@ -1413,10 +1399,8 @@
         ctx.restore();
 
         particles.forEach(p => p.draw(ctx));
-
         ctx.restore();
         
-        // NUKE ARROW LOGIC
         for(let p of pickups) {
             if (p.type === 'nuke') {
                 const screenX = p.x - camX; const screenY = p.y - camY;
