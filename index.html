@@ -46,112 +46,111 @@
         }
         @keyframes blink { 50% { opacity: 0; } }
 
-        #ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
+        /* --- NEW HUD STYLES --- */
+        #hud-top-left {
+            position: absolute; top: 20px; left: 20px;
+            display: flex; flex-direction: column; gap: 8px;
+            width: 280px;
             pointer-events: none;
-            color: #44ff44;
-            text-shadow: 0 0 5px #005500;
             z-index: 10;
         }
-        .bar-container {
-            width: 300px;
-            height: 20px;
-            background: #111;
-            border: 2px solid #333;
-            margin-bottom: 5px;
+
+        .bar-wrapper {
             position: relative;
         }
-        #health-bar {
-            width: 100%;
-            height: 100%;
-            background: #ff3333;
-            transition: width 0.1s;
-        }
-        #dash-bar { width: 100%; height: 100%; background: #ffffff; }
-        #focus-bar {
-            width: 100%;
-            height: 100%;
-            background: #ffcc00;
-            transition: background-color 0.2s;
-        }
-        #grenade-bar-container {
-             width: 300px;
-             height: 20px;
-             background: #111;
-             border: 2px solid #333;
-             position: relative;
-        }
-        #grenade-bar { width: 100%; height: 100%; background: #3388ff; }
-        #grenade-text {
-            position: absolute;
-            top: 0; left: 5px;
-            width: 100%; height: 100%;
-            font-size: 12px;
-            color: #fff;
-            line-height: 20px;
-            text-shadow: 1px 1px 2px #000;
+        .bar-label {
+            font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px;
+            margin-bottom: 2px; font-weight: 700;
         }
         
-        #score-container { margin-bottom: 10px; }
-        #score { font-size: 24px; font-weight: bold; }
-        #highscore { font-size: 16px; color: #88ff88; margin-bottom: 5px; }
-        #wave { font-size: 18px; color: #888; margin-top: 5px; }
-        
-        /* CENTERED AMMO HUD */
-        #ammo-hud {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            text-align: center;
-            pointer-events: none;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        #weapon-name {
-            font-size: 20px; 
-            font-weight: 800;
-            color: #ffff00;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            text-shadow: 0 0 5px rgba(255, 255, 0, 0.5);
-            margin-bottom: 5px;
-        }
-        #ammo-row {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 15px;
-        }
-        #ammo-count {
-            font-size: 40px; 
-            font-weight: 900;
-            color: #fff;
-            text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
-            min-width: 80px;
-            text-align: left;
-        }
-        #ammo-bar-container {
-            width: 300px; 
-            height: 12px; 
-            background: rgba(20, 20, 20, 0.8);
-            border: 2px solid #444;
+        /* Health Bar */
+        #health-container {
+            width: 100%; height: 20px;
+            background: rgba(10, 10, 10, 0.8);
+            border: 1px solid #444;
             transform: skewX(-20deg);
             padding: 2px;
-            display: flex;
-            justify-content: center; /* Centers child (fill) */
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
         }
-        #ammo-bar-fill {
-            height: 100%;
-            background: #fff;
-            width: 100%;
+        #health-fill {
+            height: 100%; width: 100%; 
+            background: linear-gradient(90deg, #cc0000, #ff3333);
+            box-shadow: 0 0 10px #ff0000;
+            transition: width 0.1s;
+        }
+
+        /* Sub Bars (Dash/Focus) */
+        .sub-bars {
+            display: flex; gap: 10px;
+            margin-top: 5px;
+        }
+        .sub-bar-group { flex: 1; }
+        .sub-bar-container {
+            width: 100%; height: 6px;
+            background: rgba(10, 10, 10, 0.8);
+            border: 1px solid #444;
+            transform: skewX(-20deg);
+            padding: 1px;
+        }
+        .sub-bar-fill { height: 100%; width: 100%; transition: width 0.1s; }
+        #dash-fill { background: #fff; box-shadow: 0 0 5px #fff; }
+        #focus-fill { background: #ffcc00; box-shadow: 0 0 5px #ffcc00; }
+
+        /* Top Right Score */
+        #hud-top-right {
+            position: absolute; top: 20px; right: 20px;
+            text-align: right;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .score-val { font-size: 32px; font-weight: 900; color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.3); line-height: 1; }
+        .score-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
+        .wave-val { font-size: 20px; color: #44ff44; font-weight: bold; margin-top: 5px; }
+
+        /* Bottom HUD (Weapons) */
+        #hud-bottom {
+            position: absolute; bottom: 30px; left: 50%;
+            transform: translateX(-50%);
+            display: flex; align-items: flex-end; gap: 40px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .weapon-widget {
+            display: flex; flex-direction: column; align-items: center;
+            opacity: 0.9; transition: opacity 0.2s, transform 0.2s;
+        }
+        .weapon-widget.secondary { opacity: 0.6; transform: scale(0.85); }
+        .weapon-widget.secondary.active { opacity: 1; transform: scale(1.0); }
+
+        .w-name {
+            font-size: 16px; font-weight: 800; color: #ffff00; text-transform: uppercase;
+            letter-spacing: 1px; text-shadow: 0 0 5px rgba(255, 255, 0, 0.5);
+            margin-bottom: 4px;
+        }
+        .w-row { display: flex; align-items: center; gap: 10px; }
+        .w-bar-box {
+            width: 180px; height: 10px;
+            background: rgba(20, 20, 20, 0.8);
+            border: 1px solid #555;
+            transform: skewX(-20deg);
+            padding: 2px;
+            display: flex; justify-content: flex-start;
+        }
+        .w-bar-fill {
+            height: 100%; width: 100%; background: #fff;
+            box-shadow: 0 0 8px currentColor;
             transition: width 0.1s, background-color 0.2s;
-            box-shadow: 0 0 10px currentColor;
         }
+        .w-count {
+            font-size: 28px; font-weight: 900; color: #fff;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+            min-width: 60px; text-align: left;
+        }
+        
+        /* Secondary specific styles override */
+        .weapon-widget.secondary .w-name { color: #44ff44; text-shadow: 0 0 5px rgba(68, 255, 68, 0.5); }
+        .weapon-widget.secondary .w-bar-fill { background-color: #44ff44; }
 
         #dev-menu {
             display: none;
@@ -214,7 +213,6 @@
             font-family: inherit;
         }
         button:hover { background: #44ff44; color: #000; }
-        .label { font-size: 12px; color: #666; margin-bottom: 2px; margin-top: 5px;}
         .controls-hint { color: #888; font-size: 14px; margin-top: 10px; }
     </style>
 </head>
@@ -235,38 +233,48 @@
         <div style="font-size:10px; color:#666; margin-top:5px; text-align:center;">Press L to Toggle</div>
     </div>
 
-    <div id="ui">
-        <div class="label">ARMOR</div>
-        <div class="bar-container">
-            <div id="health-bar"></div>
+    <!-- NEW HUD STRUCTURE -->
+    <div id="hud-top-left">
+        <div class="bar-wrapper">
+            <div class="bar-label">Health</div>
+            <div id="health-container"><div id="health-fill"></div></div>
         </div>
-        <div class="label">FOCUS (SHIFT TO ACTIVATE)</div>
-        <div class="bar-container" style="height: 6px; width: 200px;">
-            <div id="focus-bar"></div>
+        <div class="sub-bars">
+            <div class="sub-bar-group">
+                <div class="bar-label">Dash</div>
+                <div class="sub-bar-container"><div class="sub-bar-fill" id="dash-fill"></div></div>
+            </div>
+            <div class="sub-bar-group">
+                <div class="bar-label">Focus</div>
+                <div class="sub-bar-container"><div class="sub-bar-fill" id="focus-fill"></div></div>
+            </div>
         </div>
-        <div class="label">DASH (SPACE)</div>
-        <div class="bar-container" style="height: 6px; width: 200px;">
-            <div id="dash-bar"></div>
-        </div>
-        <div class="label">SECONDARY (R-CLICK)</div>
-        <div id="grenade-bar-container">
-            <div id="grenade-bar"></div>
-            <div id="grenade-text">GRENADE</div>
-        </div>
-        <div id="score-container">
-            <div id="highscore">BEST KILLS: 0</div>
-            <div id="score">KILLS: 0</div>
-        </div>
-        <div id="wave">WAVE 1</div>
     </div>
 
-    <div id="ammo-hud">
-        <div id="weapon-name">PISTOL</div>
-        <div id="ammo-row">
-            <div id="ammo-bar-container">
-                <div id="ammo-bar-fill"></div>
+    <div id="hud-top-right">
+        <div class="score-label">Confirmed Kills</div>
+        <div class="score-val" id="score-display">0</div>
+        <div class="score-label" style="font-size: 10px; margin-top: 5px;">High Score: <span id="highscore-display">0</span></div>
+        <div class="wave-val" id="wave-display">WAVE 1</div>
+    </div>
+
+    <div id="hud-bottom">
+        <!-- Primary Weapon -->
+        <div class="weapon-widget" id="primary-widget">
+            <div class="w-name" id="p-name">PISTOL</div>
+            <div class="w-row">
+                <div class="w-bar-box"><div class="w-bar-fill" id="p-bar"></div></div>
+                <div class="w-count" id="p-count">∞</div>
             </div>
-            <div id="ammo-count">∞</div>
+        </div>
+        
+        <!-- Secondary Weapon -->
+        <div class="weapon-widget secondary" id="secondary-widget" style="display:none;">
+            <div class="w-name" id="s-name">GRENADE</div>
+            <div class="w-row">
+                <div class="w-bar-box" style="width: 120px;"><div class="w-bar-fill" id="s-bar"></div></div>
+                <div class="w-count" id="s-count" style="font-size: 24px;">0</div>
+            </div>
         </div>
     </div>
 
@@ -357,6 +365,7 @@
             shotgun: () => { playTone(150, 'sawtooth', 0.2, 0.08); playNoise(0.2, 0.08); },
             rocket: () => { playTone(100, 'triangle', 0.5, 0.1); playNoise(0.5, 0.05); },
             explode: () => playNoise(0.5, 0.3),
+            mineExplode: () => { playTone(60, 'square', 0.5, 0.4); playNoise(0.8, 0.4); }, // Deeper boom
             hit: () => playTone(100, 'sawtooth', 0.1, 0.05),
             playerDamage: () => { 
                 playNoise(0.15, 0.6); 
@@ -477,12 +486,12 @@
     const GRENADE_COOLDOWN = 3000; 
     const DASH_COOLDOWN = 3750; 
     const DASH_DURATION = 150;
-    const DASH_IMPULSE = 16; 
+    const DASH_IMPULSE = 12; 
     const MAX_PARTICLES = 200; 
     
     // PHYSICS CONSTANTS
-    const PLAYER_ACCEL = 0.55; 
-    const PLAYER_FRICTION = 0.82; 
+    const PLAYER_ACCEL = 0.45; 
+    const PLAYER_FRICTION = 0.87; 
     
     const ARENA_START_SIZE = 800; 
     const ARENA_GROWTH = 150;     
@@ -498,19 +507,21 @@
     let superDamage = false;
     let isPaused = false;
 
+    // RECOIL TUNING: Shotgun (4.0), SMG (0.3), Minigun (0.8)
     const WEAPONS = {
-        pistol: { name: 'PISTOL', tier: 1, rate: 400, speed: 12, damage: 2, spread: 0.02, count: 1, color: '#ffaa00', recoil: 1.0, ammo: Infinity, maxCarry: Infinity },
-        smg:    { name: 'SMG',    tier: 1, rate: 110, speed: 13, damage: 1.8, spread: 0.15, count: 1, color: '#ffffaa', recoil: 0.5, ammo: 120, maxCarry: 360 }, 
+        pistol: { name: 'PISTOL', tier: 1, rate: 400, speed: 12, damage: 2, spread: 0.02, count: 1, color: '#ffaa00', recoil: 0.5, ammo: Infinity, maxCarry: Infinity },
+        smg:    { name: 'SMG',    tier: 1, rate: 110, speed: 13, damage: 1.8, spread: 0.15, count: 1, color: '#ffffaa', recoil: 0.3, ammo: 120, maxCarry: 360 }, 
         shotgun:{ name: 'SHOTGUN',tier: 1, rate: 1500, speed: 11, damage: 2, spread: 0.35, count: 7, color: '#ffff00', recoil: 4.0, ammo: 24, maxCarry: 72 }, 
         minigun:{ name: 'MINIGUN',tier: 2, rate: 55,  speed: 14, damage: 2.7, spread: 0.15, count: 1, color: '#00ffff', recoil: 0.8, ammo: 300, maxCarry: 900 }, 
-        rocket: { name: 'ROCKET', tier: 2, rate: 1200, speed: 8,  damage: 20, spread: 0,    count: 1, color: '#ff4444', recoil: 12, ammo: 12, maxCarry: 36, explosive: true },
+        rocket: { name: 'ROCKET', tier: 2, rate: 1200, speed: 8,  damage: 20, spread: 0,    count: 1, color: '#ff4444', recoil: 6.0, ammo: 12, maxCarry: 36, explosive: true },
         railgun:{ name: 'RAILGUN',tier: 3, rate: 1500, speed: 30, damage: 50, spread: 0,    count: 1, color: '#ff00ff', recoil: 0, ammo: 12, maxCarry: 36, pierce: true } 
     };
 
+    // SPARE AMMO ADDED (2x pickup amount)
     const SECONDARIES = {
-        mine: { name: 'MINE', ammo: 5, color: '#ff0000' },
-        turret: { name: 'SENTRY', ammo: 2, color: '#44ff44' },
-        cluster: { name: 'CLUSTER', ammo: 8, color: '#ffaa00' } // Ammo 8
+        mine: { name: 'MINE', ammo: 5, maxAmmo: 10, color: '#ff0000' },
+        turret: { name: 'SENTRY', ammo: 2, maxAmmo: 4, color: '#44ff44' },
+        cluster: { name: 'CLUSTER', ammo: 8, maxAmmo: 16, color: '#ffaa00' }
     };
 
     let width, height;
@@ -635,47 +646,50 @@
     }
 
     function updateUI() {
-        document.getElementById('health-bar').style.width = Math.max(0, player.hp) + '%';
-        document.getElementById('score').innerText = 'KILLS: ' + score;
-        document.getElementById('highscore').innerText = 'BEST KILLS: ' + highScore;
-        document.getElementById('wave').innerText = 'WAVE ' + wave;
+        document.getElementById('health-fill').style.width = Math.max(0, player.hp) + '%';
+        document.getElementById('score-display').innerText = score;
+        document.getElementById('highscore-display').innerText = highScore;
+        document.getElementById('wave-display').innerText = 'WAVE ' + wave;
         
         const weapon = WEAPONS[player.weapon];
-        document.getElementById('weapon-name').innerText = weapon.name;
-        document.getElementById('weapon-name').style.color = weapon.color;
-        document.getElementById('weapon-name').style.textShadow = `0 0 10px ${weapon.color}`;
+        document.getElementById('p-name').innerText = weapon.name;
+        document.getElementById('p-name').style.color = weapon.color;
         
-        const ammoFill = document.getElementById('ammo-bar-fill');
-        const ammoCount = document.getElementById('ammo-count');
+        const pFill = document.getElementById('p-bar');
+        const pCount = document.getElementById('p-count');
         
         if (player.ammo === Infinity) {
-            ammoFill.style.width = '100%';
-            ammoFill.style.backgroundColor = weapon.color;
-            ammoFill.style.boxShadow = `0 0 15px ${weapon.color}`;
-            ammoCount.innerText = '∞';
+            pFill.style.width = '100%';
+            pFill.style.backgroundColor = weapon.color;
+            pCount.innerText = '∞';
         } else {
             const pct = Math.min(100, (player.ammo / weapon.maxCarry) * 100);
-            ammoFill.style.width = pct + '%';
-            ammoFill.style.backgroundColor = weapon.color;
-            ammoFill.style.boxShadow = `0 0 10px ${weapon.color}`;
-            ammoCount.innerText = player.ammo;
-            
-            if (player.ammo <= weapon.ammo * 0.2) {
-                ammoFill.style.backgroundColor = '#ff0000';
-            }
+            pFill.style.width = pct + '%';
+            pFill.style.backgroundColor = weapon.color;
+            pCount.innerText = player.ammo;
+            if (player.ammo <= weapon.ammo * 0.2) pFill.style.backgroundColor = '#ff0000';
         }
 
         // Secondary UI
-        const gText = document.getElementById('grenade-text');
-        const gBar = document.getElementById('grenade-bar');
+        const sWidget = document.getElementById('secondary-widget');
         if (player.secondaryWeapon && player.secondaryAmmo > 0) {
+            sWidget.style.display = 'flex';
             const sw = SECONDARIES[player.secondaryWeapon];
-            gText.innerText = `${sw.name}: ${player.secondaryAmmo}`;
-            gBar.style.width = '100%';
-            gBar.style.backgroundColor = sw.color;
+            document.getElementById('s-name').innerText = sw.name;
+            document.getElementById('s-name').style.color = sw.color;
+            document.getElementById('s-count').innerText = player.secondaryAmmo;
+            
+            // Cooldown visual on bar
+            const cdPercent = Math.min(1, (gameTime - lastGrenadeTime) / GRENADE_COOLDOWN);
+            const sBar = document.getElementById('s-bar');
+            sBar.style.width = (cdPercent * 100) + '%';
+            sBar.style.backgroundColor = cdPercent >= 1 ? sw.color : '#555';
+            
+            if (cdPercent >= 1) sWidget.classList.add('active'); else sWidget.classList.remove('active');
         } else {
-            gText.innerText = 'GRENADE';
-            // bar width managed in loop based on cooldown
+            sWidget.style.display = 'none';
+            // If no secondary, show grenade bar logic implicitly or just hide?
+            // User requested secondary UI match primary. If no secondary picked up, maybe hide it.
         }
     }
 
@@ -789,8 +803,13 @@
     }
 
     function setSecondary(type) {
-        player.secondaryWeapon = type;
-        player.secondaryAmmo = SECONDARIES[type].ammo;
+        // If already has same secondary, add ammo
+        if (player.secondaryWeapon === type) {
+            player.secondaryAmmo = Math.min(SECONDARIES[type].maxAmmo, player.secondaryAmmo + SECONDARIES[type].ammo);
+        } else {
+            player.secondaryWeapon = type;
+            player.secondaryAmmo = SECONDARIES[type].ammo;
+        }
         updateUI(); Audio.pickup();
     }
     
@@ -869,7 +888,7 @@
             for(let e of enemies) {
                 if(Math.hypot(e.x - this.x, e.y - this.y) < this.triggerRadius) {
                     this.life = 0;
-                    createExplosion(this.x, this.y);
+                    createExplosion(this.x, this.y, false, true); // true = isMine
                     break;
                 }
             }
@@ -922,7 +941,7 @@
                     while (diff > Math.PI) diff -= Math.PI * 2;
                     while (diff < -Math.PI) diff += Math.PI * 2;
                     
-                    const turnSpeed = 0.1 * dt; // Max turn per frame
+                    const turnSpeed = 0.05 * dt; // Reduced speed (was 0.1)
                     if (Math.abs(diff) < turnSpeed) this.angle = targetAngle;
                     else this.angle += Math.sign(diff) * turnSpeed;
 
@@ -987,7 +1006,6 @@
                 ctx.fillStyle = '#000'; ctx.font = '20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('☢', 0, 2);
                 ctx.shadowBlur = 15; ctx.shadowColor = '#ffff00'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); ctx.shadowBlur = 0;
             } else if (this.type === 'medikit') {
-                // INCREASED SIZE TO MATCH WEAPONS
                 ctx.fillStyle = '#fff'; ctx.fillRect(-16, -10, 32, 20);
                 ctx.fillStyle = '#00ff00'; ctx.fillRect(-4, -8, 8, 16); ctx.fillRect(-8, -4, 16, 8);
                 ctx.strokeStyle = '#00ff00'; ctx.strokeRect(-16, -10, 32, 20);
@@ -995,9 +1013,19 @@
                 // Check if secondary
                 if (SECONDARIES[this.type]) {
                     const s = SECONDARIES[this.type];
-                    ctx.fillStyle = '#111'; ctx.fillRect(-16, -10, 32, 20);
-                    ctx.fillStyle = s.color; ctx.font = '10px Arial'; ctx.fillText(s.name.substring(0,3), -12, 5);
-                    ctx.strokeStyle = s.color; ctx.strokeRect(-16, -10, 32, 20);
+                    // Pentagon Shape for Secondary
+                    ctx.fillStyle = '#111'; 
+                    ctx.beginPath();
+                    ctx.moveTo(0, -15);
+                    ctx.lineTo(15, -5);
+                    ctx.lineTo(10, 12);
+                    ctx.lineTo(-10, 12);
+                    ctx.lineTo(-15, -5);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    ctx.fillStyle = s.color; ctx.font = '10px Arial'; ctx.textAlign = 'center'; ctx.fillText(s.name.substring(0,3), 0, 5);
+                    ctx.strokeStyle = s.color; ctx.stroke();
                 } else {
                     const w = WEAPONS[this.type]; ctx.fillStyle = '#222'; 
                     ctx.fillRect(-16, -10, 32, 20);
@@ -1060,7 +1088,7 @@
             ctx.translate(this.x, this.y);
             ctx.rotate(this.rotation);
             ctx.fillStyle = '#1f101f'; // Boss body color
-            ctx.strokeStyle = '#00ffff'; // Boss glow color
+            ctx.strokeStyle = '#ffaa00'; // Boss glow color CHANGED to Orange
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(this.points[0].x, this.points[0].y);
@@ -1446,13 +1474,16 @@
             if (player.focus < player.maxFocus) { player.focus += FOCUS_REGEN; if (player.focus > player.maxFocus) player.focus = player.maxFocus; }
         }
         
+        document.getElementById('dash-fill').style.width = Math.min(100, (Math.min(1, (gameTime - (lastDashTime + DASH_DURATION)) / DASH_COOLDOWN)) * 100) + '%';
+        document.getElementById('focus-fill').style.width = player.focus + '%';
+
         gameTime += 16.6 * dt; 
 
         const camTargetX = player.x - width / 2;
         const camTargetY = player.y - height / 2;
-        // Smoother camera lerp (0.08)
-        camera.x += (camTargetX - camera.x) * 0.08;
-        camera.y += (camTargetY - camera.y) * 0.08;
+        // Smoother camera lerp (0.04) - "Lazier" follow to reduce shake
+        camera.x += (camTargetX - camera.x) * 0.04;
+        camera.y += (camTargetY - camera.y) * 0.04;
         camera.x = Math.max(0, Math.min(WORLD_SIZE - width, camera.x));
         camera.y = Math.max(0, Math.min(WORLD_SIZE - height, camera.y));
 
@@ -1498,7 +1529,7 @@
 
         let isDashing = (gameTime - lastDashTime < DASH_DURATION);
         const dashP = Math.min(1, (gameTime - (lastDashTime + DASH_DURATION)) / DASH_COOLDOWN);
-        document.getElementById('dash-bar').style.width = (dashP * 100) + '%';
+        // document.getElementById('dash-bar').style.width = (dashP * 100) + '%';
         if (keys.space && !isDashing && dashP >= 1) {
             lastDashTime = gameTime; 
             isDashing = true; // Still used for logic/visuals
@@ -1568,12 +1599,10 @@
             if (player.secondaryWeapon && player.secondaryAmmo > 0) {
                 // Determine cooldown for special weapon
                 let onCooldown = false;
-                // MINE matches grenade cooldown
-                if (player.secondaryWeapon === 'mine') {
-                    if (gameTime - lastGrenadeTime < GRENADE_COOLDOWN) onCooldown = true;
-                }
-                // Others use fast cooldown
-                else if (gameTime - lastGrenadeTime < 500) onCooldown = true;
+                
+                // Mine, Cluster, and generic use standard grenade cooldown
+                // (User requested Cluster match normal grenade)
+                if (gameTime - lastGrenadeTime < GRENADE_COOLDOWN) onCooldown = true;
 
                 if (!onCooldown) {
                     lastGrenadeTime = gameTime;
@@ -1584,6 +1613,9 @@
                          turrets.push(new Turret(player.x, player.y, player.angle));
                     } else if (player.secondaryWeapon === 'cluster') {
                          grenades.push(new Grenade(player.x, player.y, player.angle, true));
+                         // Cluster Recoil (Same as Normal Grenade)
+                         player.vx -= Math.cos(player.angle) * 12;
+                         player.vy -= Math.sin(player.angle) * 12;
                          Audio.rocket();
                     }
                     
@@ -1609,13 +1641,22 @@
             }
         }
         
-        // Update Grenade Bar Visuals
-        const gBar = document.getElementById('grenade-bar');
-        // If holding a mine, show the grenade cooldown bar
-        if (!player.secondaryWeapon || player.secondaryWeapon === 'mine') {
+        // Update Grenade Bar Visuals (Handled in updateUI now for the new widget)
+        updateUI(); // Keep visuals synced slightly better? Actually expensive. Let's just update the secondary bar if needed.
+        if (player.secondaryWeapon) {
              const cdPercent = Math.min(1, (gameTime - lastGrenadeTime) / GRENADE_COOLDOWN);
-             gBar.style.width = (cdPercent * 100) + '%';
-             gBar.style.backgroundColor = cdPercent >= 1 ? '#3388ff' : '#555';
+             const sBar = document.getElementById('s-bar');
+             if(sBar) {
+                sBar.style.width = (cdPercent * 100) + '%';
+                const sWidget = document.getElementById('secondary-widget');
+                if (cdPercent >= 1) {
+                    sBar.style.backgroundColor = SECONDARIES[player.secondaryWeapon].color;
+                    sWidget.classList.add('active');
+                } else {
+                    sBar.style.backgroundColor = '#555';
+                    sWidget.classList.remove('active');
+                }
+             }
         }
 
         for (let i = bullets.length - 1; i >= 0; i--) {
@@ -1784,8 +1825,10 @@
         shakeX *= 0.8; shakeY *= 0.8;
     }
 
-    function createExplosion(x, y, isBig = false) {
-        shakeX = isBig ? 40 : 20; shakeY = isBig ? 40 : 20; Audio.explode();
+    function createExplosion(x, y, isBig = false, isMine = false) {
+        shakeX = isBig ? 40 : 20; shakeY = isBig ? 40 : 20; 
+        if (isMine) Audio.mineExplode(); else Audio.explode();
+        
         const pCount = isBig ? 60 : 30;
         for(let i=0; i<pCount; i++) particles.push(new Particle(x, y, '#ffaa00', isBig ? 15 : 10));
         
